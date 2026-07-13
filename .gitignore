@@ -1,0 +1,11 @@
+node_modules/
+dist/
+dist-electron/
+release/
+release-new/
+*.db
+*.pem
+.env
+proxies.txt
+*.db-wal
+*.db-shm

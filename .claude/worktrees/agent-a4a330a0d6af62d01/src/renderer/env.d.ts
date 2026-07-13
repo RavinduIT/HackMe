@@ -1,0 +1,48 @@
+interface Window {
+  hackme: {
+    getProjects: () => Promise<any[]>;
+    createProject: (name: string, url: string) => Promise<any>;
+    deleteProject: (id: string) => Promise<boolean>;
+    getScans: (projectId: string) => Promise<any[]>;
+    createScan: (projectId: string, config: any) => Promise<any>;
+    startScan: (scanId: string) => Promise<boolean>;
+    stopScan: (scanId: string) => Promise<boolean>;
+    getFindings: (scanId: string) => Promise<any[]>;
+    getAllFindings: () => Promise<any[]>;
+    markFalsePositive: (id: string, value: boolean) => Promise<boolean>;
+    proxyStart: (port: number) => Promise<boolean>;
+    proxyStop: () => Promise<boolean>;
+    proxySetIntercept: (enabled: boolean) => Promise<boolean>;
+    proxyForward: (queueId: string, modified?: any) => Promise<boolean>;
+    proxyDrop: (queueId: string) => Promise<boolean>;
+    proxyGetHistory: (limit: number, offset: number) => Promise<any[]>;
+    proxyGetIntercepted: () => Promise<any[]>;
+    proxyClearHistory: () => Promise<boolean>;
+    proxyExportCA: (path: string) => Promise<boolean>;
+    proxyGetStatus: () => Promise<{ running: boolean; port: number; intercept_enabled: boolean }>;
+    getScopeRules: () => Promise<any[]>;
+    addScopeRule: (rule: any) => Promise<boolean>;
+    deleteScopeRule: (id: number) => Promise<boolean>;
+    scanFromHistory: (historyId: number) => Promise<any>;
+    sendRequest: (method: string, url: string, headers: Record<string, string>, body: string | null) => Promise<any>;
+    generateReport: (scanId: string, format: string, outputPath: string) => Promise<any>;
+    getModules: () => Promise<any[]>;
+    clearAllData: () => Promise<boolean>;
+    clearFindings: () => Promise<boolean>;
+    clearProxyHistory: () => Promise<boolean>;
+    clearScans: () => Promise<boolean>;
+    getSetting: (key: string) => Promise<any>;
+    setSetting: (key: string, value: any) => Promise<boolean>;
+    getAllSettings: () => Promise<Record<string, any>>;
+    aiIsConfigured: () => Promise<boolean>;
+    aiAnalyzeUrl: (url: string) => Promise<any>;
+    aiAnalyzeJs: (jsUrl: string) => Promise<any>;
+    aiAnalyzeFindings: (scanId: string) => Promise<any>;
+    aiAnalyzeCookies: (url: string) => Promise<any>;
+    onScanProgress: (callback: (data: any) => void) => () => void;
+    onScanFinding: (callback: (data: any) => void) => () => void;
+    onProxyRequest: (callback: (data: any) => void) => () => void;
+    onProxyIntercept: (callback: (data: any) => void) => () => void;
+    showSaveDialog: (options: any) => Promise<string | null>;
+  };
+}

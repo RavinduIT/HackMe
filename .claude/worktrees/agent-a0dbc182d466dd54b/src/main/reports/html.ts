@@ -1,0 +1,127 @@
+import fs from 'fs';
+import Database from 'better-sqlite3';
+
+const SEVERITY_COLORS: Record<string, string> = {
+  critical: '#ef4444',
+  high: '#f97316',
+  medium: '#eab308',
+  low: '#3b82f6',
+  info: '#6b7280',
+};
+
+export function generateHtmlReport(db: Database.Database, scanId: string, outputPath: string): void {
+  const scan = db.prepare('SELECT * FROM scans WHERE id = ?').get(scanId) as any;
+  if (!scan) throw new Error('Scan not found');
+
+  const findings = db.prepare('SELECT * FROM findings WHERE scan_id = ? ORDER BY cvss_score DESC').all(scanId) as any[];
+  const counts = JSON.parse(scan.findings_count || '{}');
+
+  const findingsHtml = findings.map((f) => {
+    let evidenceHtml = '';
+    if (f.evidence) {
+      let evidence: Record<string, any> = {};
+      try {
+        evidence = typeof f.evidence === 'string' ? JSON.parse(f.evidence) : f.evidence;
+      } catch {}
+
+      if (evidence && Object.keys(evidence).length > 0) {
+        // Truncate long values in the evidence
+        const truncated: Record<string, any> = {};
+        for (const [key, value] of Object.entries(evidence)) {
+          const strValue = typeof value === 'string' ? value : JSON.stringify(value);
+          truncated[key] = strValue.length > 1000 ? strValue.substring(0, 1000) + '...' : value;
+        }
+        evidenceHtml = `
+        <details class="evidence-details">
+          <summary class="evidence-summary">Evidence</summary>
+          <pre class="evidence-pre">${escapeHtml(JSON.stringify(truncated, null, 2))}</pre>
+        </details>`;
+      }
+    }
+
+    return `
+    <div class="finding">
+      <div class="finding-header">
+        <span class="severity" style="background:${SEVERITY_COLORS[f.severity]};">${f.severity.toUpperCase()}</span>
+        <span class="title">${escapeHtml(f.title)}</span>
+        ${f.cvss_score ? `<span class="cvss">CVSS ${f.cvss_score}</span>` : ''}
+      </div>
+      <div class="finding-meta">
+        <span>URL: <code>${escapeHtml(f.url || 'N/A')}</code></span>
+        ${f.parameter ? `<span>Parameter: <code>${escapeHtml(f.parameter)}</code></span>` : ''}
+        ${f.cwe_id ? `<span>CWE: ${escapeHtml(f.cwe_id)}</span>` : ''}
+        ${f.owasp_category ? `<span>OWASP: ${escapeHtml(f.owasp_category)}</span>` : ''}
+      </div>
+      <p class="description">${escapeHtml(f.description || '')}</p>
+      ${f.remediation ? `<p class="remediation"><strong>Remediation:</strong> ${escapeHtml(f.remediation)}</p>` : ''}
+      ${evidenceHtml}
+    </div>
+  `;
+  }).join('\n');
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HackMe Scan Report — ${escapeHtml(scan.target_url)}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0f; color: #e4e4ef; padding: 40px; }
+  .container { max-width: 900px; margin: 0 auto; }
+  h1 { color: #00ff88; font-size: 28px; margin-bottom: 4px; }
+  h2 { color: #8888a0; font-size: 14px; margin-bottom: 30px; font-weight: normal; }
+  h3 { color: #e4e4ef; font-size: 16px; margin: 30px 0 15px; }
+  .meta { background: #12121a; border: 1px solid #2a2a3a; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+  .meta p { font-size: 13px; color: #8888a0; margin: 4px 0; }
+  .meta p span { color: #e4e4ef; }
+  .summary { display: flex; gap: 12px; margin-bottom: 30px; }
+  .summary-card { flex: 1; background: #12121a; border: 1px solid #2a2a3a; border-radius: 8px; padding: 15px; text-align: center; }
+  .summary-card .count { font-size: 28px; font-weight: bold; }
+  .summary-card .label { font-size: 11px; color: #8888a0; text-transform: uppercase; margin-top: 4px; }
+  .finding { background: #12121a; border: 1px solid #2a2a3a; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+  .finding-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .severity { color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; }
+  .title { font-size: 14px; font-weight: 600; }
+  .cvss { margin-left: auto; font-size: 12px; color: #8888a0; font-family: monospace; }
+  .finding-meta { font-size: 11px; color: #8888a0; margin-bottom: 8px; display: flex; gap: 16px; flex-wrap: wrap; }
+  .finding-meta code { color: #00d4ff; background: #1a1a26; padding: 1px 4px; border-radius: 3px; }
+  .description { font-size: 13px; line-height: 1.6; color: #ccc; margin-bottom: 8px; }
+  .remediation { font-size: 12px; color: #00cc6a; }
+  .evidence-details { margin-top: 8px; }
+  .evidence-summary { cursor: pointer; font-size: 12px; color: #8888a0; font-weight: 600; padding: 4px 0; }
+  .evidence-summary:hover { color: #00d4ff; }
+  .evidence-pre { background: #0d0d14; border: 1px solid #2a2a3a; border-radius: 6px; padding: 12px; font-family: 'Consolas', 'Courier New', monospace; font-size: 11px; color: #b0b0c0; overflow-x: auto; white-space: pre-wrap; word-break: break-all; margin-top: 6px; }
+  .footer { text-align: center; margin-top: 40px; font-size: 11px; color: #555; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>HackMe</h1>
+  <h2>Security Scan Report</h2>
+  <div class="meta">
+    <p>Target: <span>${escapeHtml(scan.target_url)}</span></p>
+    <p>Profile: <span>${scan.profile}</span></p>
+    <p>Date: <span>${new Date(scan.started_at || Date.now()).toLocaleString()}</span></p>
+    <p>Requests: <span>${scan.total_requests}</span></p>
+  </div>
+  <div class="summary">
+    ${Object.entries(counts).map(([sev, count]) => `
+      <div class="summary-card">
+        <div class="count" style="color:${SEVERITY_COLORS[sev]};">${count}</div>
+        <div class="label">${sev}</div>
+      </div>
+    `).join('')}
+  </div>
+  <h3>Findings (${findings.length})</h3>
+  ${findingsHtml || '<p style="color:#555;text-align:center;padding:20px;">No findings.</p>'}
+  <div class="footer">Generated by HackMe Security Scanner — ${new Date().toISOString()}</div>
+</div>
+</body>
+</html>`;
+
+  fs.writeFileSync(outputPath, html);
+}
+
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
