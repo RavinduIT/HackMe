@@ -295,6 +295,63 @@ export function registerIpcHandlers(db: Database.Database, proxy: ProxyServer, o
     return getOobServer().generateId();
   });
 
+  // ── Proxy Testing ──
+  ipcMain.handle('proxy:testSingle', async (_, proxy: { host: string; port: number; username?: string; password?: string }) => {
+    const { quickTestProxy } = await import('./scanner/proxy-tester');
+    return await quickTestProxy(proxy);
+  });
+
+  ipcMain.handle('proxy:testAll', async () => {
+    const { ProxyTester } = await import('./scanner/proxy-tester');
+    const listRow = db.prepare("SELECT value FROM app_settings WHERE key = 'proxy_list'").get() as any;
+    if (!listRow) return { error: 'No proxies loaded' };
+
+    try {
+      const proxies = JSON.parse(listRow.value);
+      if (!Array.isArray(proxies) || proxies.length === 0) return { error: 'No proxies loaded' };
+
+      const tester = new ProxyTester(10000);
+      const results = await tester.testProxies(proxies, 5);
+      const summary = tester.summarizeResults(results);
+
+      // Update proxy list with only alive proxies (optional - keep dead ones marked)
+      const aliveProxies = results.filter(r => r.status === 'alive').map(r => r.proxy);
+
+      return {
+        results,
+        summary,
+        aliveCount: aliveProxies.length,
+        deadCount: proxies.length - aliveProxies.length,
+      };
+    } catch (e: any) {
+      return { error: e.message };
+    }
+  });
+
+  ipcMain.handle('proxy:removeDeadProxies', async () => {
+    const { ProxyTester } = await import('./scanner/proxy-tester');
+    const listRow = db.prepare("SELECT value FROM app_settings WHERE key = 'proxy_list'").get() as any;
+    if (!listRow) return { removed: 0, remaining: 0 };
+
+    try {
+      const proxies = JSON.parse(listRow.value);
+      if (!Array.isArray(proxies) || proxies.length === 0) return { removed: 0, remaining: 0 };
+
+      const tester = new ProxyTester(8000);
+      const aliveProxies = await tester.filterAliveProxies(proxies, 10);
+
+      // Save only alive proxies
+      db.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('proxy_list', ?)").run(JSON.stringify(aliveProxies));
+
+      return {
+        removed: proxies.length - aliveProxies.length,
+        remaining: aliveProxies.length,
+      };
+    } catch (e: any) {
+      return { error: e.message };
+    }
+  });
+
   // ── Clear Data ──
   ipcMain.handle('data:clearAll', () => {
     db.prepare('DELETE FROM findings').run();

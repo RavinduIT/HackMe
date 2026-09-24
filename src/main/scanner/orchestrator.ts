@@ -12,6 +12,7 @@ import { HeadersModule } from '../modules/headers';
 import { TlsSslModule } from '../modules/tls-ssl';
 import { SqlInjectionModule } from '../modules/sql-injection';
 import { XssModule } from '../modules/xss';
+import { XssEnhancedModule } from '../modules/xss-enhanced';
 import { CommandInjectionModule } from '../modules/command-injection';
 import { SstiModule } from '../modules/ssti';
 import { NosqlInjectionModule } from '../modules/nosql-injection';
@@ -69,6 +70,7 @@ const ALL_MODULES: ScanModuleInterface[] = [
   new TlsSslModule(),
   new SqlInjectionModule(),
   new XssModule(),
+  new XssEnhancedModule(),  // Enhanced XSS with DOM, template injection, mXSS detection
   new CommandInjectionModule(),
   new SstiModule(),
   new NosqlInjectionModule(),
@@ -151,12 +153,13 @@ export class ScanOrchestrator {
     try {
       console.log(`[Scanner] Starting scan ${scanId} on ${scan.target_url}`);
 
-      // Pre-check: verify target is reachable
+      // Pre-check: verify target is reachable (use direct connection, no proxy)
       this.emitProgress(scanId, { module: 'Connectivity check', percent: 2, requests: 0 });
-      const checkRes = await client.get(scan.target_url);
+      const directClient = new HttpClient({ maxPerSecond: 10, maxConcurrent: 5 }); // No proxy for connectivity check
+      const checkRes = await directClient.get(scan.target_url);
       if (checkRes.status === 0) {
-        console.error(`[Scanner] Target unreachable: ${scan.target_url}`);
-        this.emitProgress(scanId, { module: 'ERROR: Target unreachable', percent: 0, requests: 0 });
+        console.error(`[Scanner] Target unreachable: ${scan.target_url} - ${checkRes.error}`);
+        this.emitProgress(scanId, { module: `ERROR: Target unreachable - ${checkRes.error || 'Connection failed'}`, percent: 0, requests: 0 });
         this.db.prepare("UPDATE scans SET status = 'failed', completed_at = CURRENT_TIMESTAMP WHERE id = ?").run(scanId);
         return;
       }

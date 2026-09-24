@@ -87,6 +87,12 @@ const api = {
   aiAnalyzeFindings: (scanId: string) => ipcRenderer.invoke('ai:analyzeFindings', scanId),
   aiAnalyzeCookies: (url: string) => ipcRenderer.invoke('ai:analyzeCookies', url),
 
+  // Proxy Testing
+  testSingleProxy: (proxy: { host: string; port: number; username?: string; password?: string }) =>
+    ipcRenderer.invoke('proxy:testSingle', proxy),
+  testAllProxies: () => ipcRenderer.invoke('proxy:testAll'),
+  removeDeadProxies: () => ipcRenderer.invoke('proxy:removeDeadProxies'),
+
   // Events
   onScanProgress: (callback: (data: any) => void) => {
     const listener = (_: any, data: any) => callback(data);

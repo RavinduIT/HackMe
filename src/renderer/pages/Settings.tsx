@@ -11,6 +11,9 @@ export default function Settings() {
   const [apiKey, setApiKey] = useState('');
   const [proxyCount, setProxyCount] = useState(0);
   const [exported, setExported] = useState(false);
+  const [proxyTesting, setProxyTesting] = useState(false);
+  const [proxyTestResults, setProxyTestResults] = useState<any>(null);
+  const [singleProxyTest, setSingleProxyTest] = useState<any>(null);
 
   useEffect(() => {
     (async () => {
@@ -102,11 +105,95 @@ export default function Settings() {
         <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: 12, lineHeight: 1.6 }}>
           Upload a text file with one proxy per line. Format: <span style={{ fontFamily: 'var(--font-code)', color: 'var(--ac)' }}>host:port:username:password</span>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
           <button onClick={uploadProxies} className="hm-btn hm-btn-accent-ghost">Upload Proxy List</button>
           {proxyCount > 0 && <span style={{ fontSize: 11, fontFamily: 'var(--font-code)', color: 'var(--ac)' }}>{proxyCount} proxies loaded</span>}
           {proxyCount > 0 && <button onClick={async () => { await window.hackme.setSetting('proxy_list', []); setProxyCount(0); flash('Cleared'); }} className="hm-btn hm-btn-ghost" style={{ marginLeft: 'auto', fontSize: 10, padding: '4px 10px' }}>Clear</button>}
         </div>
+
+        {/* Proxy Testing */}
+        {proxyCount > 0 && (
+          <div style={{ background: 'var(--bg-0)', padding: 14, borderRadius: 'var(--radius)', border: '1px solid var(--border)', marginTop: 8 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+              <button
+                onClick={async () => {
+                  setProxyTesting(true);
+                  setProxyTestResults(null);
+                  try {
+                    const results = await (window.hackme as any).testAllProxies();
+                    setProxyTestResults(results);
+                  } catch (e: any) {
+                    flash('Test failed: ' + e.message);
+                  }
+                  setProxyTesting(false);
+                }}
+                disabled={proxyTesting}
+                className="hm-btn hm-btn-primary"
+                style={{ fontSize: 11, padding: '6px 14px' }}
+              >
+                {proxyTesting ? 'Testing...' : 'Test All Proxies'}
+              </button>
+              <button
+                onClick={async () => {
+                  setProxyTesting(true);
+                  try {
+                    const result = await (window.hackme as any).removeDeadProxies();
+                    if (result.error) {
+                      flash('Error: ' + result.error);
+                    } else {
+                      flash(`Removed ${result.removed} dead proxies. ${result.remaining} remaining.`);
+                      setProxyCount(result.remaining);
+                    }
+                  } catch (e: any) {
+                    flash('Error: ' + e.message);
+                  }
+                  setProxyTesting(false);
+                }}
+                disabled={proxyTesting}
+                className="hm-btn hm-btn-ghost"
+                style={{ fontSize: 11, padding: '6px 14px' }}
+              >
+                Remove Dead Proxies
+              </button>
+            </div>
+
+            {proxyTestResults && proxyTestResults.summary && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 10 }}>
+                  <div style={{ background: 'var(--bg-1)', padding: 10, borderRadius: 6, textAlign: 'center' }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--ok)' }}>{proxyTestResults.summary.alive}</div>
+                    <div style={{ fontSize: 10, color: 'var(--t3)' }}>Alive</div>
+                  </div>
+                  <div style={{ background: 'var(--bg-1)', padding: 10, borderRadius: 6, textAlign: 'center' }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--crit)' }}>{proxyTestResults.summary.dead}</div>
+                    <div style={{ fontSize: 10, color: 'var(--t3)' }}>Dead</div>
+                  </div>
+                  <div style={{ background: 'var(--bg-1)', padding: 10, borderRadius: 6, textAlign: 'center' }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--warn)' }}>{proxyTestResults.summary.timeout}</div>
+                    <div style={{ fontSize: 10, color: 'var(--t3)' }}>Timeout</div>
+                  </div>
+                  <div style={{ background: 'var(--bg-1)', padding: 10, borderRadius: 6, textAlign: 'center' }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--ac)' }}>{proxyTestResults.summary.avgLatency}ms</div>
+                    <div style={{ fontSize: 10, color: 'var(--t3)' }}>Avg Latency</div>
+                  </div>
+                </div>
+
+                {proxyTestResults.summary.countries && Object.keys(proxyTestResults.summary.countries).length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 4 }}>Countries:</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {Object.entries(proxyTestResults.summary.countries).map(([country, count]) => (
+                        <span key={country} style={{ fontSize: 10, padding: '2px 6px', background: 'var(--ac-lo)', color: 'var(--ac)', borderRadius: 3 }}>
+                          {country}: {count as number}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </Section>
 
       {/* ─── SINGLE PROXY ─── */}
